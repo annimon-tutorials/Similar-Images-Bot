@@ -1,0 +1,22 @@
+plugins {
+    id 'java'
+    id 'application'
+}
+
+sourceCompatibility = 11
+targetCompatibility = 11
+mainClassName = 'com.annimon.similarimagesbot.Main'
+group 'com.annimon'
+version '1.0-SNAPSHOT'
+
+repositories {
+    jcenter()
+}
+
+dependencies {
+    implementation 'com.github.pengrad:java-telegram-bot-api:4.9.0'
+    implementation 'com.github.kilianB:JImageHash:3.0.0'
+    implementation 'com.h2database:h2:1.4.200'
+
+    testCompile 'junit:junit:4.12'
+}
