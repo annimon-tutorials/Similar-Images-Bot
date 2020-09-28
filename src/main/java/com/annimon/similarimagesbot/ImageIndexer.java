@@ -5,7 +5,6 @@ import com.annimon.similarimagesbot.data.Post;
 import com.annimon.similarimagesbot.data.SimilarImagesInfo;
 import com.github.kilianB.hashAlgorithms.DifferenceHash;
 import com.github.kilianB.hashAlgorithms.PerceptiveHash;
-import com.github.kilianB.matcher.persistent.database.H2DatabaseImageMatcher;
 import java.awt.image.BufferedImage;
 import java.sql.DriverManager;
 import java.sql.SQLException;
@@ -17,7 +16,7 @@ import static com.github.kilianB.hashAlgorithms.DifferenceHash.Precision;
 
 public class ImageIndexer {
 
-    private final Map<Long, H2DatabaseImageMatcher> databases = new HashMap<>(5);
+    private final Map<Long, SimilarImagesH2DatabaseMatcher> databases = new HashMap<>(5);
     private final DifferenceHash differenceHash = new DifferenceHash(32, Precision.Double);
     private final PerceptiveHash perceptiveHash = new PerceptiveHash(32);
 
@@ -41,14 +40,21 @@ public class ImageIndexer {
         return new SimilarImagesInfo(originalPost, results);
     }
 
-    private H2DatabaseImageMatcher getDatabaseForChannel(Long channelId) throws SQLException {
+
+    public void deleteImage(Long channelId, Integer messageId) throws SQLException {
+        final String uniqueId = messageId.toString();
+        final var db = getDatabaseForChannel(channelId);
+        db.removeImage(uniqueId);
+    }
+
+    private SimilarImagesH2DatabaseMatcher getDatabaseForChannel(Long channelId) throws SQLException {
         var db = databases.get(channelId);
         if (db != null) {
             return db;
         }
         var jdbcUrl = "jdbc:h2:./imagesdb_" + channelId;
         var conn = DriverManager.getConnection(jdbcUrl, "root", "");
-        db = new H2DatabaseImageMatcher(conn);
+        db = new SimilarImagesH2DatabaseMatcher(conn);
         db.addHashingAlgorithm(differenceHash, 0.4);
         db.addHashingAlgorithm(perceptiveHash, 0.2);
         databases.put(channelId, db);

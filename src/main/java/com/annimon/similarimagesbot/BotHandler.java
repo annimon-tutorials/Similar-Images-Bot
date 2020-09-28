@@ -8,6 +8,7 @@ import com.pengrad.telegrambot.model.Message;
 import com.pengrad.telegrambot.model.PhotoSize;
 import com.pengrad.telegrambot.model.Update;
 import com.pengrad.telegrambot.model.request.ParseMode;
+import com.pengrad.telegrambot.request.DeleteMessage;
 import com.pengrad.telegrambot.request.GetFile;
 import com.pengrad.telegrambot.request.GetUpdates;
 import com.pengrad.telegrambot.request.SendMessage;
@@ -20,6 +21,7 @@ import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import javax.imageio.ImageIO;
 
@@ -42,13 +44,37 @@ public class BotHandler {
 
     public void run() {
         bot.setUpdatesListener(updates -> {
+            processAdminCommands(updates);
             processUpdates(updates);
             return UpdatesListener.CONFIRMED_UPDATES_ALL;
         });
     }
 
     public void runOnce() {
-        processUpdates(bot.execute(new GetUpdates()).updates());
+        final var updates = bot.execute(new GetUpdates()).updates();
+        processAdminCommands(updates);
+        processUpdates(updates);
+    }
+
+    private void processAdminCommands(List<Update> updates) {
+        final var delPattern = Pattern.compile("/del(\\d+)m(\\d+)");
+        updates.stream()
+                .map(Update::message)
+                .filter(Objects::nonNull)
+                .filter(msg -> msg.chat().id() == adminId)
+                .map(Message::text)
+                .filter(Objects::nonNull)
+                .forEach(command -> {
+                    final var m = delPattern.matcher(command);
+                    if (m.find()) {
+                        final var channelId = Long.parseLong("-100" + m.group(1));
+                        final var messageId = Integer.parseInt(m.group(2));
+                        bot.execute(new DeleteMessage(channelId, messageId));
+                        try {
+                            indexer.deleteImage(channelId, messageId);
+                        } catch (SQLException ignored) {}
+                    }
+                });
     }
 
     private void processUpdates(List<Update> updates) {
@@ -84,10 +110,14 @@ public class BotHandler {
 
     private void sendReport(List<SimilarImagesInfo> infos) {
         String report = infos.stream().map(info -> {
-            String text = "For post " + formatPostLink(info.getOriginalPost()) + " found:\n";
+            final var post = info.getOriginalPost();
+            String text = "For post " + formatPostLink(post) + " found:\n";
             text += info.getResults().stream()
                     .map(r -> String.format("  %s, dst: %.2f", formatPostLink(r.getPost()), r.getDistance()))
                     .collect(Collectors.joining("\n"));
+            text += String.format("%n/del%sm%d",
+                    post.getChannelId().toString().replace("-100", ""),
+                    post.getMessageId());
             return text;
         }).collect(Collectors.joining("\n\n"));
 
