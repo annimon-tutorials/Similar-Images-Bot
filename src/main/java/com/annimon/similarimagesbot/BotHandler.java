@@ -9,6 +9,7 @@ import com.pengrad.telegrambot.model.PhotoSize;
 import com.pengrad.telegrambot.model.Update;
 import com.pengrad.telegrambot.model.request.ParseMode;
 import com.pengrad.telegrambot.request.GetFile;
+import com.pengrad.telegrambot.request.GetUpdates;
 import com.pengrad.telegrambot.request.SendMessage;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
@@ -41,33 +42,44 @@ public class BotHandler {
 
     public void run() {
         bot.setUpdatesListener(updates -> {
-            final List<Message> channelPosts = updates.stream()
-                    .map(Update::channelPost)
-                    .filter(Objects::nonNull)
-                    .filter(msg -> msg.photo() != null)
-                    .collect(Collectors.toList());
-
-            final var similarImagesInfos = new ArrayList<SimilarImagesInfo>();
-            for (var post : channelPosts) {
-                final PhotoSize photo = getSmallestPhoto(post.photo());
-                try {
-                    final var tgFile = bot.execute(new GetFile(photo.fileId())).file();
-                    final var url = new URL(bot.getFullFilePath(tgFile));
-                    final BufferedImage image = ImageIO.read(url);
-                    final var originalPost = new Post(post.chat().id(), post.messageId());
-                    final SimilarImagesInfo info = indexer.processImage(originalPost, image);
-                    if (info.hasResults()) {
-                        similarImagesInfos.add(info);
-                    }
-                } catch (IOException | SQLException e) {
-                    System.err.format("Error while processing photo in %s%n", linkToMessage(post));
-                }
-            }
-            if (!similarImagesInfos.isEmpty()) {
-                sendReport(similarImagesInfos);
-            }
+            processUpdates(updates);
             return UpdatesListener.CONFIRMED_UPDATES_ALL;
         });
+    }
+
+    public void runOnce() {
+        processUpdates(bot.execute(new GetUpdates()).updates());
+    }
+
+    private void processUpdates(List<Update> updates) {
+        final List<Message> channelPosts = getChannelPostsWithPhotos(updates);
+        final var similarImagesInfos = new ArrayList<SimilarImagesInfo>();
+        for (var post : channelPosts) {
+            final PhotoSize photo = getSmallestPhoto(post.photo());
+            try {
+                final var tgFile = bot.execute(new GetFile(photo.fileId())).file();
+                final var url = new URL(bot.getFullFilePath(tgFile));
+                final BufferedImage image = ImageIO.read(url);
+                final var originalPost = new Post(post.chat().id(), post.messageId());
+                final SimilarImagesInfo info = indexer.processImage(originalPost, image);
+                if (info.hasResults()) {
+                    similarImagesInfos.add(info);
+                }
+            } catch (IOException | SQLException e) {
+                System.err.format("Error while processing photo in %s%n", linkToMessage(post));
+            }
+        }
+        if (!similarImagesInfos.isEmpty()) {
+            sendReport(similarImagesInfos);
+        }
+    }
+
+    private List<Message> getChannelPostsWithPhotos(List<Update> updates) {
+        return updates.stream()
+                .map(Update::channelPost)
+                .filter(Objects::nonNull)
+                .filter(msg -> msg.photo() != null)
+                .collect(Collectors.toList());
     }
 
     private void sendReport(List<SimilarImagesInfo> infos) {

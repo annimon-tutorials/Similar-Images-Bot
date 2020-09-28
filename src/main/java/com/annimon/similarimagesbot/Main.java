@@ -10,7 +10,11 @@ public class Main {
         final ImageIndexer indexer = new ImageIndexer();
         final var handler = new BotHandler(botToken, indexer);
         handler.setAdminId(longProp("ADMIN_ID").orElse(0L));
-        handler.run();
+        if (args.length == 1 && args[0].equalsIgnoreCase("once")) {
+            handler.runOnce();
+        } else {
+            handler.run();
+        }
     }
 
     private static Optional<String> stringProp(String name) {
