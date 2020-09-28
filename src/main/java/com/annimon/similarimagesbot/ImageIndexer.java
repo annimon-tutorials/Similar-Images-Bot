@@ -13,19 +13,22 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import static com.github.kilianB.hashAlgorithms.DifferenceHash.Precision;
 
 public class ImageIndexer {
 
-    private final Map<Long, H2DatabaseImageMatcher> databases;
-
-    public ImageIndexer() {
-        databases = new HashMap<>(5);
-    }
+    private final Map<Long, H2DatabaseImageMatcher> databases = new HashMap<>(5);
+    private final DifferenceHash differenceHash = new DifferenceHash(32, Precision.Double);
+    private final PerceptiveHash perceptiveHash = new PerceptiveHash(32);
 
     public SimilarImagesInfo processImage(Post originalPost, BufferedImage image)
             throws SQLException {
         final Long channelId = originalPost.getChannelId();
+        final String uniqueId = originalPost.getMessageId().toString();
         final var db = getDatabaseForChannel(channelId);
+        if (db.doesEntryExist(uniqueId, differenceHash)) {
+            return new SimilarImagesInfo(originalPost, List.of());
+        }
         final List<ImageResult> results = db.getMatchingImages(image)
                 .stream()
                 .map(r -> {
@@ -34,7 +37,7 @@ public class ImageIndexer {
                 })
                 .filter(r -> !r.isSamePost(originalPost))
                 .collect(Collectors.toList());
-        db.addImage(originalPost.getMessageId().toString(), image);
+        db.addImage(uniqueId, image);
         return new SimilarImagesInfo(originalPost, results);
     }
 
@@ -46,8 +49,8 @@ public class ImageIndexer {
         var jdbcUrl = "jdbc:h2:./imagesdb_" + channelId;
         var conn = DriverManager.getConnection(jdbcUrl, "root", "");
         db = new H2DatabaseImageMatcher(conn);
-        db.addHashingAlgorithm(new DifferenceHash(32, DifferenceHash.Precision.Double), .4);
-        db.addHashingAlgorithm(new PerceptiveHash(32), .2);
+        db.addHashingAlgorithm(differenceHash, 0.4);
+        db.addHashingAlgorithm(perceptiveHash, 0.2);
         databases.put(channelId, db);
         return db;
     }
