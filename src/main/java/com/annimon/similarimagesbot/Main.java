@@ -10,11 +10,18 @@ public class Main {
         final ImageIndexer indexer = new ImageIndexer();
         final var handler = new BotHandler(botToken, indexer);
         handler.setAdminId(longProp("ADMIN_ID").orElse(0L));
-        if (args.length == 1 && args[0].equalsIgnoreCase("once")) {
+        if (isOnceMode() || (args.length == 1 && args[0].equalsIgnoreCase("once"))) {
+            System.out.println("Started in once mode");
             handler.runOnce();
         } else {
+            System.out.println("Started in listen mode");
             handler.run();
         }
+    }
+
+    private static boolean isOnceMode() {
+        final var mode = stringProp("MODE").orElse("once");
+        return mode.equalsIgnoreCase("once");
     }
 
     private static Optional<String> stringProp(String name) {

@@ -8,7 +8,7 @@ sourceCompatibility = 11
 targetCompatibility = 11
 mainClassName = 'com.annimon.similarimagesbot.Main'
 group 'com.annimon'
-version '1.0-SNAPSHOT'
+version '1.0'
 
 repositories {
     jcenter()
