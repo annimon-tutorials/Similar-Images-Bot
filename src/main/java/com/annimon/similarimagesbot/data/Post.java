@@ -33,4 +33,9 @@ public class Post {
     public int hashCode() {
         return Objects.hash(channelId, messageId);
     }
+
+    @Override
+    public String toString() {
+        return "{" + channelId + ":" + messageId + "}";
+    }
 }

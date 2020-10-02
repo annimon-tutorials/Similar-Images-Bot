@@ -21,6 +21,7 @@ import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import javax.imageio.ImageIO;
@@ -44,27 +45,27 @@ public class BotHandler {
 
     public void run() {
         bot.setUpdatesListener(updates -> {
-            processAdminCommands(updates);
-            processUpdates(updates);
+            final var removedPosts = processAdminCommands(updates);
+            processUpdates(updates, removedPosts);
             return UpdatesListener.CONFIRMED_UPDATES_ALL;
         });
     }
 
     public void runOnce() {
         final var updates = bot.execute(new GetUpdates()).updates();
-        processAdminCommands(updates);
-        processUpdates(updates);
+        final var removedPosts = processAdminCommands(updates);
+        processUpdates(updates, removedPosts);
     }
 
-    private void processAdminCommands(List<Update> updates) {
+    private Set<Post> processAdminCommands(List<Update> updates) {
         final var delPattern = Pattern.compile("/del(\\d+)m(\\d+)");
-        updates.stream()
+        return updates.stream()
                 .map(Update::message)
                 .filter(Objects::nonNull)
                 .filter(msg -> msg.chat().id() == adminId)
                 .map(Message::text)
                 .filter(Objects::nonNull)
-                .forEach(command -> {
+                .map(command -> {
                     final var m = delPattern.matcher(command);
                     if (m.find()) {
                         final var channelId = Long.parseLong("-100" + m.group(1));
@@ -72,21 +73,29 @@ public class BotHandler {
                         bot.execute(new DeleteMessage(channelId, messageId));
                         try {
                             indexer.deleteImage(channelId, messageId);
-                        } catch (SQLException ignored) {}
+                        } catch (SQLException ex) {
+                            System.err.println("Cannot delete image in db");
+                        }
+                        return new Post(channelId, messageId);
                     }
-                });
+                    return null;
+                })
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
     }
 
-    private void processUpdates(List<Update> updates) {
+    private void processUpdates(List<Update> updates, Set<Post> ignoredPosts) {
         final List<Message> channelPosts = getChannelPostsWithPhotos(updates);
         final var similarImagesInfos = new ArrayList<SimilarImagesInfo>();
         for (var post : channelPosts) {
+            final var originalPost = new Post(post.chat().id(), post.messageId());
+            if (ignoredPosts.contains(originalPost)) continue;
+
             final PhotoSize photo = getSmallestPhoto(post.photo());
             try {
                 final var tgFile = bot.execute(new GetFile(photo.fileId())).file();
                 final var url = new URL(bot.getFullFilePath(tgFile));
                 final BufferedImage image = ImageIO.read(url);
-                final var originalPost = new Post(post.chat().id(), post.messageId());
                 final SimilarImagesInfo info = indexer.processImage(originalPost, image);
                 if (info.hasResults()) {
                     similarImagesInfos.add(info);
