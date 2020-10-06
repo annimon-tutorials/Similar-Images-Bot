@@ -12,9 +12,9 @@ WORKDIR /usr/src/java-code
 RUN GRADLE_OPTS="-Xmx256m" gradle shadowJar --build-cache --stacktrace --no-daemon
 
 FROM openjdk:11
-RUN mkdir -p /app
-COPY --from=builder /usr/src/java-code/build/libs/SimilarImagesBot-1.0-all.jar /app/SimilarImagesBot-1.0-all.jar
-ENV BOT_TOKEN ''
-ENV ADMIN_ID 0
-ENV MODE 'once'
-CMD java -jar /app/SimilarImagesBot-1.0-all.jar
+WORKDIR /app
+COPY --from=builder /usr/src/java-code/build/libs/SimilarImagesBot-1.0.1-all.jar .
+ENV BOT_TOKEN '' \
+    ADMIN_ID 0 \
+    MODE 'once'
+ENTRYPOINT ["java", "-jar", "/app/SimilarImagesBot-1.0.1-all.jar"]
