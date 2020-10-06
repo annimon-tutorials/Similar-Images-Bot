@@ -13,8 +13,8 @@ RUN GRADLE_OPTS="-Xmx256m" gradle shadowJar --build-cache --stacktrace --no-daem
 
 FROM openjdk:11
 WORKDIR /app
-COPY --from=builder /usr/src/java-code/build/libs/SimilarImagesBot-1.0.1-all.jar .
+COPY --from=builder /usr/src/java-code/build/libs/SimilarImagesBot-1.0.2-all.jar .
 ENV BOT_TOKEN '' \
     ADMIN_ID 0 \
     MODE 'once'
-ENTRYPOINT ["java", "-jar", "/app/SimilarImagesBot-1.0.1-all.jar"]
+ENTRYPOINT ["java", "-jar", "/app/SimilarImagesBot-1.0.2-all.jar"]

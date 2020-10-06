@@ -1,5 +1,6 @@
 package com.annimon.similarimagesbot;
 
+import com.annimon.similarimagesbot.data.ImageResult;
 import com.annimon.similarimagesbot.data.Post;
 import com.annimon.similarimagesbot.data.SimilarImagesInfo;
 import com.pengrad.telegrambot.TelegramBot;
@@ -7,11 +8,15 @@ import com.pengrad.telegrambot.UpdatesListener;
 import com.pengrad.telegrambot.model.Message;
 import com.pengrad.telegrambot.model.PhotoSize;
 import com.pengrad.telegrambot.model.Update;
+import com.pengrad.telegrambot.model.request.InputMediaPhoto;
 import com.pengrad.telegrambot.model.request.ParseMode;
 import com.pengrad.telegrambot.request.DeleteMessage;
+import com.pengrad.telegrambot.request.ForwardMessage;
 import com.pengrad.telegrambot.request.GetFile;
 import com.pengrad.telegrambot.request.GetUpdates;
+import com.pengrad.telegrambot.request.SendMediaGroup;
 import com.pengrad.telegrambot.request.SendMessage;
+import com.pengrad.telegrambot.response.SendResponse;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.net.URL;
@@ -21,12 +26,20 @@ import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
+import java.util.function.Predicate;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import javax.imageio.ImageIO;
 
 public class BotHandler {
+
+    private final Comparator<PhotoSize> photoSizeComparator = Comparator
+            .comparingInt(ps -> ps.width() * ps.height());
+    private final Pattern delPattern = Pattern.compile("/del(\\d+)m(\\d+)");
+    private final Pattern comparePattern = Pattern.compile("/compare(\\d+)m(\\d+)x(\\d+)");
 
     private final TelegramBot bot;
     private final ImageIndexer indexer;
@@ -58,30 +71,62 @@ public class BotHandler {
     }
 
     private Set<Post> processAdminCommands(List<Update> updates) {
-        final var delPattern = Pattern.compile("/del(\\d+)m(\\d+)");
         return updates.stream()
                 .map(Update::message)
                 .filter(Objects::nonNull)
                 .filter(msg -> msg.chat().id() == adminId)
                 .map(Message::text)
                 .filter(Objects::nonNull)
-                .map(command -> {
-                    final var m = delPattern.matcher(command);
-                    if (m.find()) {
-                        final var channelId = Long.parseLong("-100" + m.group(1));
-                        final var messageId = Integer.parseInt(m.group(2));
-                        bot.execute(new DeleteMessage(channelId, messageId));
-                        try {
-                            indexer.deleteImage(channelId, messageId);
-                        } catch (SQLException ex) {
-                            System.err.println("Cannot delete image in db");
-                        }
-                        return new Post(channelId, messageId);
-                    }
-                    return null;
-                })
+                .map(command -> Optional.<Post>empty()
+                        .or(() -> processDelCommand(delPattern.matcher(command)))
+                        .or(() -> processCompareCommand(comparePattern.matcher(command)))
+                        .orElse(null))
                 .filter(Objects::nonNull)
                 .collect(Collectors.toSet());
+    }
+
+    private Optional<Post> processDelCommand(Matcher m) {
+        if (!m.find()) {
+            return Optional.empty();
+        }
+        final var channelId = Long.parseLong("-100" + m.group(1));
+        final var messageId = Integer.parseInt(m.group(2));
+        bot.execute(new DeleteMessage(channelId, messageId));
+        try {
+            indexer.deleteImage(channelId, messageId);
+        } catch (SQLException ex) {
+            System.err.println("Cannot delete image in db");
+        }
+        return Optional.of(new Post(channelId, messageId));
+    }
+
+    private Optional<Post> processCompareCommand(Matcher m) {
+        if (!m.find()) {
+            return Optional.empty();
+        }
+        final var channelId = Long.parseLong("-100" + m.group(1));
+        final var messageA = Integer.parseInt(m.group(2));
+        final var messageB = Integer.parseInt(m.group(3));
+
+        // Forward and get photo to compare
+        var sentA = bot.execute(new ForwardMessage(adminId, channelId, messageA));
+        var sentB = bot.execute(new ForwardMessage(adminId, channelId, messageB));
+        final Predicate<SendResponse> hasPhoto = (r) -> r.isOk() && r.message().photo() != null;
+        if (hasPhoto.test(sentA) && hasPhoto.test(sentB)) {
+            final var photoA = getBiggestPhoto(sentA.message().photo());
+            final var photoB = getBiggestPhoto(sentB.message().photo());
+            bot.execute(new SendMediaGroup(adminId,
+                    new InputMediaPhoto(photoA.fileId()).caption("Post " + messageA),
+                    new InputMediaPhoto(photoB.fileId()).caption("Post " + messageB) ));
+        }
+        // Clean up if one of the images already deleted
+        if (sentA.message() != null) {
+            bot.execute(new DeleteMessage(adminId, sentA.message().messageId()));
+        }
+        if (sentB.message() != null) {
+            bot.execute(new DeleteMessage(adminId, sentB.message().messageId()));
+        }
+        return Optional.empty();
     }
 
     private void processUpdates(List<Update> updates, Set<Post> ignoredPosts) {
@@ -120,13 +165,20 @@ public class BotHandler {
     private void sendReport(List<SimilarImagesInfo> infos) {
         String report = infos.stream().map(info -> {
             final var post = info.getOriginalPost();
+            final var channelId = post.getChannelId().toString().replace("-100", "");
             String text = "For post " + formatPostLink(post) + " found:\n";
+            // Matching results
             text += info.getResults().stream()
                     .map(r -> String.format("  %s, dst: %.2f", formatPostLink(r.getPost()), r.getDistance()))
                     .collect(Collectors.joining("\n"));
-            text += String.format("%n/del%sm%d",
-                    post.getChannelId().toString().replace("-100", ""),
-                    post.getMessageId());
+            // /compare command
+            text += info.getResults().stream()
+                    .map(ImageResult::getPost)
+                    .map(p -> String.format("/compare%sm%dx%d",
+                            channelId, post.getMessageId(), p.getMessageId()))
+                    .collect(Collectors.joining("\n"));
+            // /del command
+            text += String.format("%n/del%sm%d", channelId, post.getMessageId());
             return text;
         }).collect(Collectors.joining("\n\n"));
 
@@ -152,7 +204,13 @@ public class BotHandler {
 
     private PhotoSize getSmallestPhoto(PhotoSize[] photoSizes) {
         return Arrays.stream(photoSizes)
-                .min(Comparator.comparingInt(ps -> ps.width() * ps.height()))
+                .min(photoSizeComparator)
+                .orElse(photoSizes[0]);
+    }
+
+    private PhotoSize getBiggestPhoto(PhotoSize[] photoSizes) {
+        return Arrays.stream(photoSizes)
+                .max(photoSizeComparator)
                 .orElse(photoSizes[0]);
     }
 }
