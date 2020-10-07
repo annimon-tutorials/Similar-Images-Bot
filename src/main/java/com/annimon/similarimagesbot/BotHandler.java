@@ -147,9 +147,9 @@ public class BotHandler extends BaseBotHandler {
             // /compare command
             text += info.getResults().stream()
                     .map(ImageResult::getPost)
-                    .map(p -> String.format("/compare%sm%dx%d",
+                    .map(p -> String.format("%n/compare%sm%dx%d",
                             channelId, post.getMessageId(), p.getMessageId()))
-                    .collect(Collectors.joining("\n"));
+                    .collect(Collectors.joining());
             // /del command
             text += String.format("%n/del%sm%d", channelId, post.getMessageId());
             return text;
