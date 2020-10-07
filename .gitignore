@@ -6,4 +6,5 @@
 .settings
 bin
 build
+*.dat
 *.db

@@ -1,29 +1,10 @@
 package com.annimon.similarimagesbot;
 
-import com.annimon.similarimagesbot.data.ImageResult;
-import com.annimon.similarimagesbot.data.Post;
-import com.annimon.similarimagesbot.data.SimilarImagesInfo;
-import com.pengrad.telegrambot.TelegramBot;
-import com.pengrad.telegrambot.UpdatesListener;
-import com.pengrad.telegrambot.model.Message;
-import com.pengrad.telegrambot.model.PhotoSize;
-import com.pengrad.telegrambot.model.Update;
-import com.pengrad.telegrambot.model.request.InputMediaPhoto;
-import com.pengrad.telegrambot.model.request.ParseMode;
-import com.pengrad.telegrambot.request.DeleteMessage;
-import com.pengrad.telegrambot.request.ForwardMessage;
-import com.pengrad.telegrambot.request.GetFile;
-import com.pengrad.telegrambot.request.GetUpdates;
-import com.pengrad.telegrambot.request.SendMediaGroup;
-import com.pengrad.telegrambot.request.SendMessage;
-import com.pengrad.telegrambot.response.SendResponse;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.net.URL;
 import java.sql.SQLException;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -33,22 +14,31 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import javax.imageio.ImageIO;
+import com.annimon.similarimagesbot.data.ImageResult;
+import com.annimon.similarimagesbot.data.Post;
+import com.annimon.similarimagesbot.data.SimilarImagesInfo;
+import com.pengrad.telegrambot.model.Message;
+import com.pengrad.telegrambot.model.PhotoSize;
+import com.pengrad.telegrambot.model.Update;
+import com.pengrad.telegrambot.model.request.InputMediaPhoto;
+import com.pengrad.telegrambot.model.request.ParseMode;
+import com.pengrad.telegrambot.request.DeleteMessage;
+import com.pengrad.telegrambot.request.ForwardMessage;
+import com.pengrad.telegrambot.request.GetFile;
+import com.pengrad.telegrambot.request.SendMediaGroup;
+import com.pengrad.telegrambot.request.SendMessage;
+import com.pengrad.telegrambot.response.SendResponse;
 
-public class BotHandler {
+public class BotHandler extends BaseBotHandler {
 
-    private final Comparator<PhotoSize> photoSizeComparator = Comparator
-            .comparingInt(ps -> ps.width() * ps.height());
     private final Pattern delPattern = Pattern.compile("/del(\\d+)m(\\d+)");
     private final Pattern comparePattern = Pattern.compile("/compare(\\d+)m(\\d+)x(\\d+)");
 
-    private final TelegramBot bot;
     private final ImageIndexer indexer;
     private long adminId;
 
     public BotHandler(String botToken, ImageIndexer indexer) {
-        bot = new TelegramBot.Builder(botToken)
-                .updateListenerSleep(20_000L)
-                .build();
+        super(botToken);
         this.indexer = indexer;
     }
 
@@ -56,16 +46,7 @@ public class BotHandler {
         this.adminId = adminId;
     }
 
-    public void run() {
-        bot.setUpdatesListener(updates -> {
-            final var removedPosts = processAdminCommands(updates);
-            processUpdates(updates, removedPosts);
-            return UpdatesListener.CONFIRMED_UPDATES_ALL;
-        });
-    }
-
-    public void runOnce() {
-        final var updates = bot.execute(new GetUpdates()).updates();
+    protected void handleUpdates(List<Update> updates) {
         final var removedPosts = processAdminCommands(updates);
         processUpdates(updates, removedPosts);
     }
@@ -154,14 +135,6 @@ public class BotHandler {
         }
     }
 
-    private List<Message> getChannelPostsWithPhotos(List<Update> updates) {
-        return updates.stream()
-                .map(Update::channelPost)
-                .filter(Objects::nonNull)
-                .filter(msg -> msg.photo() != null)
-                .collect(Collectors.toList());
-    }
-
     private void sendReport(List<SimilarImagesInfo> infos) {
         String report = infos.stream().map(info -> {
             final var post = info.getOriginalPost();
@@ -200,17 +173,5 @@ public class BotHandler {
 
     private String linkToMessage(Long chatId, Integer messageId) {
         return "https://t.me/c/" + chatId.toString().replace("-100", "") + "/" + messageId;
-    }
-
-    private PhotoSize getSmallestPhoto(PhotoSize[] photoSizes) {
-        return Arrays.stream(photoSizes)
-                .min(photoSizeComparator)
-                .orElse(photoSizes[0]);
-    }
-
-    private PhotoSize getBiggestPhoto(PhotoSize[] photoSizes) {
-        return Arrays.stream(photoSizes)
-                .max(photoSizeComparator)
-                .orElse(photoSizes[0]);
     }
 }
