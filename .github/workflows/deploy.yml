@@ -22,18 +22,13 @@ jobs:
     - uses: actions/upload-artifact@v2
       with:
         path: build/libs/*.jar
-    # TODO remove
-    - name: Display structure of downloaded files
-      run: ls -R
-      working-directory: build/libs
     # Upload from data to production server
-    - uses: actions/checkout@v2
-    - name: Copy app to server
-      uses: appleboy/scp-action@v0.1.1
+    - name: Upload app to server
+      uses: garygrossgarten/github-action-scp@v0.6.0
       with:
         host: ${{ secrets.SSH_HOST }}
         username: ${{ secrets.SSH_USER }}
         password: ${{ secrets.SSH_PASS }}
         port: ${{ secrets.SSH_PORT }}
-        source: "build/libs/"
-        target: "bots/similar-images-bot"
+        local: "build/libs"
+        remote: "bots/similar-images-bot"
