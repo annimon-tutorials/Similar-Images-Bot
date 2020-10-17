@@ -15,8 +15,12 @@ import com.pengrad.telegrambot.model.Message;
 import com.pengrad.telegrambot.model.PhotoSize;
 import com.pengrad.telegrambot.model.Update;
 import com.pengrad.telegrambot.request.GetUpdates;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 public abstract class BaseBotHandler {
+
+    protected static final Logger LOGGER = LogManager.getLogger(BaseBotHandler.class);
 
     private final Comparator<PhotoSize> photoSizeComparator = Comparator
             .comparingInt(ps -> ps.width() * ps.height());
@@ -33,23 +37,26 @@ public abstract class BaseBotHandler {
 
     public void run() {
         int oldLastUpdateId = readLastUpdateId();
+        LOGGER.debug("Start updates listener from {}", oldLastUpdateId);
         bot.setUpdatesListener(updates -> {
             final var filteredUpdates = updates.stream()
                     .filter(u -> u.updateId() > oldLastUpdateId)
                     .collect(Collectors.toList());
             handleUpdates(filteredUpdates);
-            int newLastUpdateId = getLastUpdateIdFromUpdatesList(updates, oldLastUpdateId);
-            writeLastUpdateId(newLastUpdateId + 1);
+            int nextLastUpdateId = geNextUpdateId(updates, oldLastUpdateId);
+            writeNextUpdateId(nextLastUpdateId);
             return UpdatesListener.CONFIRMED_UPDATES_ALL;
         });
     }
 
     public void runOnce() {
         int oldLastUpdateId = readLastUpdateId();
+        LOGGER.debug("Get updates from {}", oldLastUpdateId);
         final var updates = bot.execute(new GetUpdates().offset(oldLastUpdateId)).updates();
+        LOGGER.debug("Handle {} updates", updates.size());
         handleUpdates(updates);
-        int newLastUpdateId = getLastUpdateIdFromUpdatesList(updates, oldLastUpdateId);
-        writeLastUpdateId(newLastUpdateId + 1);
+        int newLastUpdateId = geNextUpdateId(updates, oldLastUpdateId);
+        writeNextUpdateId(newLastUpdateId);
     }
 
     protected abstract void handleUpdates(List<Update> updates);
@@ -74,23 +81,33 @@ public abstract class BaseBotHandler {
                 .orElse(photoSizes[0]);
     }
 
-    private int getLastUpdateIdFromUpdatesList(List<Update> updates, int previousUpdateId) {
-        return updates.stream()
+    private int geNextUpdateId(List<Update> updates, int previousUpdateId) {
+        final int lastUpdateId = updates.stream()
             .mapToInt(Update::updateId)
             .max()
             .orElse(previousUpdateId);
+        final int nextUpdateId; 
+        if (lastUpdateId != previousUpdateId) {
+            nextUpdateId = lastUpdateId + 1;
+        } else {
+            nextUpdateId = lastUpdateId;
+        }
+        return nextUpdateId;
     }
 
     private int readLastUpdateId() {
         try {
             return Integer.parseInt(Files.readString(uniqueIdPath));
         } catch (IOException ioe) {
+            LOGGER.error("readLastUpdateId", ioe);
             return 0;
         }
     }
 
-    private void writeLastUpdateId(int updateId) {
+    private void writeNextUpdateId(int updateId) {
         try {
             Files.writeString(uniqueIdPath, Integer.toString(updateId));
-        } catch (IOException ignore) {}
+        } catch (IOException ioe) {
+            LOGGER.error("writeLastUpdateId", ioe);
+        }
     }}

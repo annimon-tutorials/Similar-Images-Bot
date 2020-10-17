@@ -1,8 +1,12 @@
 package com.annimon.similarimagesbot;
 
 import java.util.Optional;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 public class Main {
+
+    private static final Logger LOGGER = LogManager.getLogger(Main.class);
 
     public static void main(String[] args) {
         final String botToken = stringProp("BOT_TOKEN")
@@ -11,10 +15,10 @@ public class Main {
         final var handler = new BotHandler(botToken, indexer);
         handler.setAdminId(longProp("ADMIN_ID").orElse(0L));
         if (isOnceMode() || (args.length == 1 && args[0].equalsIgnoreCase("once"))) {
-            System.out.println("Started in once mode");
+            LOGGER.info("Started in once mode");
             handler.runOnce();
         } else {
-            System.out.println("Started in listen mode");
+            LOGGER.info("Started in listen mode");
             handler.run();
         }
     }

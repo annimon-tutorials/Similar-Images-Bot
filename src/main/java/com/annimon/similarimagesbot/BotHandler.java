@@ -72,11 +72,12 @@ public class BotHandler extends BaseBotHandler {
         }
         final var channelId = Long.parseLong("-100" + m.group(1));
         final var messageId = Integer.parseInt(m.group(2));
+        LOGGER.debug("Delete message {} in {}", messageId, channelId);
         bot.execute(new DeleteMessage(channelId, messageId));
         try {
             indexer.deleteImage(channelId, messageId);
         } catch (SQLException ex) {
-            System.err.println("Cannot delete image in db");
+            LOGGER.error("Cannot delete image in db", ex);
         }
         return Optional.of(new Post(channelId, messageId));
     }
@@ -88,6 +89,7 @@ public class BotHandler extends BaseBotHandler {
         final var channelId = Long.parseLong("-100" + m.group(1));
         final var messageA = Integer.parseInt(m.group(2));
         final var messageB = Integer.parseInt(m.group(3));
+        LOGGER.debug("Compare messages {} and {} in {}", messageA, messageB, channelId);
 
         // Forward and get photo to compare
         var sentA = bot.execute(new ForwardMessage(adminId, channelId, messageA));
@@ -127,7 +129,7 @@ public class BotHandler extends BaseBotHandler {
                     similarImagesInfos.add(info);
                 }
             } catch (IOException | SQLException e) {
-                System.err.format("Error while processing photo in %s%n", linkToMessage(post));
+                LOGGER.error("Error while processing photo in {}", linkToMessage(post));
             }
         }
         if (!similarImagesInfos.isEmpty()) {
