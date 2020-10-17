@@ -97,7 +97,8 @@ public abstract class BaseBotHandler {
 
     private int readLastUpdateId() {
         try {
-            return Integer.parseInt(Files.readString(uniqueIdPath));
+            final String content = Files.readString(uniqueIdPath);
+            return Integer.parseInt(content.trim());
         } catch (IOException ioe) {
             LOGGER.error("readLastUpdateId", ioe);
             return 0;
