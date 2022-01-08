@@ -31,8 +31,9 @@ import com.pengrad.telegrambot.response.SendResponse;
 
 public class BotHandler extends BaseBotHandler {
 
-    private final Pattern delPattern = Pattern.compile("/del(\\d+)m(\\d+)");
-    private final Pattern comparePattern = Pattern.compile("/compare(\\d+)m(\\d+)x(\\d+)");
+    private static final int RADIX = 36;
+    private final Pattern delPattern = Pattern.compile("/del([^_]+)_(\\d+)");
+    private final Pattern comparePattern = Pattern.compile("/cmp([^-]+)_([^-]+)_(.*)");
 
     private final ImageIndexer indexer;
     private long adminId;
@@ -70,8 +71,8 @@ public class BotHandler extends BaseBotHandler {
         if (!m.find()) {
             return Optional.empty();
         }
-        final var channelId = Long.parseLong("-100" + m.group(1));
-        final var messageId = Integer.parseInt(m.group(2));
+        final var channelId = parseChannelIdForCommand(m.group(1));
+        final var messageId = Integer.parseInt(m.group(2), RADIX);
         LOGGER.debug("Delete message {} in {}", messageId, channelId);
         bot.execute(new DeleteMessage(channelId, messageId));
         try {
@@ -86,9 +87,9 @@ public class BotHandler extends BaseBotHandler {
         if (!m.find()) {
             return Optional.empty();
         }
-        final var channelId = Long.parseLong("-100" + m.group(1));
-        final var messageA = Integer.parseInt(m.group(2));
-        final var messageB = Integer.parseInt(m.group(3));
+        final var channelId = parseChannelIdForCommand(m.group(1));
+        final var messageA = Integer.parseInt(m.group(2), RADIX);
+        final var messageB = messageA - Integer.parseInt(m.group(3), RADIX);
         LOGGER.debug("Compare messages {} and {} in {}", messageA, messageB, channelId);
 
         // Forward and get photo to compare
@@ -139,9 +140,9 @@ public class BotHandler extends BaseBotHandler {
 
     private void sendReport(List<SimilarImagesInfo> infos) {
         String report = infos.stream().map(info -> {
-            final var post = info.getOriginalPost();
-            final var channelId = post.getChannelId().toString().replace("-100", "");
-            String text = "For post " + formatPostLink(post) + " found:\n";
+            final var originalPost = info.getOriginalPost();
+            final var channelId = formatChannelIdForCommands(originalPost.getChannelId());
+            String text = "For originalPost " + formatPostLink(originalPost) + " found:\n";
             // Matching results
             text += info.getResults().stream()
                     .map(r -> String.format("  %s, dst: %.2f", formatPostLink(r.getPost()), r.getDistance()))
@@ -149,11 +150,10 @@ public class BotHandler extends BaseBotHandler {
             // /compare command
             text += info.getResults().stream()
                     .map(ImageResult::getPost)
-                    .map(p -> String.format("%n/compare%sm%dx%d",
-                            channelId, post.getMessageId(), p.getMessageId()))
+                    .map(p -> formatCompareCommand(channelId, originalPost,p))
                     .collect(Collectors.joining());
             // /del command
-            text += String.format("%n/del%sm%d", channelId, post.getMessageId());
+            text += formatDelCommand(channelId, originalPost);
             return text;
         }).collect(Collectors.joining("\n\n"));
 
@@ -164,9 +164,30 @@ public class BotHandler extends BaseBotHandler {
         }
     }
 
+    private String formatChannelIdForCommands(Long channelId) {
+        var id = channelId.toString().replace("-100", "");
+        return Long.toString(Long.parseLong(id), RADIX);
+    }
+
+    private long parseChannelIdForCommand(String str) {
+        return Long.parseLong("-100" + Long.parseLong(str, RADIX));
+    }
+
     private String formatPostLink(Post post) {
         String link = linkToMessage(post.getChannelId(), post.getMessageId());
         return String.format("[#%d](%s)", post.getMessageId(), link);
+    }
+
+    private String formatCompareCommand(String channelId, Post originalPost, Post currentPost) {
+        final var originalPostId = originalPost.getMessageId();
+        final var postDiffId = originalPostId - currentPost.getMessageId();
+        return String.format("%n/cmp%s_%s_%s",
+                channelId, Integer.toString(originalPostId, RADIX), Integer.toString(postDiffId, RADIX));
+    }
+
+    private String formatDelCommand(String channelId, Post originalPost) {
+        final var originalPostId = originalPost.getMessageId();
+        return String.format("%n/del%s_%s", channelId, Integer.toString(originalPostId, RADIX));
     }
 
     private String linkToMessage(Message msg) {
