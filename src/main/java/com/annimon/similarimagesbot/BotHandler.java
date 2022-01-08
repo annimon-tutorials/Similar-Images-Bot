@@ -130,7 +130,7 @@ public class BotHandler extends BaseBotHandler {
                     similarImagesInfos.add(info);
                 }
             } catch (IOException | SQLException e) {
-                LOGGER.error("Error while processing photo in {}", linkToMessage(post));
+                LOGGER.error("Error while processing photo in " + linkToMessage(post), e);
             }
         }
         if (!similarImagesInfos.isEmpty()) {
@@ -150,7 +150,7 @@ public class BotHandler extends BaseBotHandler {
             // /compare command
             text += info.getResults().stream()
                     .map(ImageResult::getPost)
-                    .map(p -> formatCompareCommand(channelId, originalPost,p))
+                    .map(p -> formatCompareCommand(channelId, originalPost, p))
                     .collect(Collectors.joining());
             // /del command
             text += formatDelCommand(channelId, originalPost);
@@ -181,13 +181,13 @@ public class BotHandler extends BaseBotHandler {
     private String formatCompareCommand(String channelId, Post originalPost, Post currentPost) {
         final var originalPostId = originalPost.getMessageId();
         final var postDiffId = originalPostId - currentPost.getMessageId();
-        return String.format("%n/cmp%s_%s_%s",
+        return String.format("%n/cmp%s\\_%s\\_%s",
                 channelId, Integer.toString(originalPostId, RADIX), Integer.toString(postDiffId, RADIX));
     }
 
     private String formatDelCommand(String channelId, Post originalPost) {
         final var originalPostId = originalPost.getMessageId();
-        return String.format("%n/del%s_%s", channelId, Integer.toString(originalPostId, RADIX));
+        return String.format("%n/del%s\\_%s", channelId, Integer.toString(originalPostId, RADIX));
     }
 
     private String linkToMessage(Message msg) {
