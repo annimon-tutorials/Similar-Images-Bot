@@ -32,7 +32,7 @@ import com.pengrad.telegrambot.response.SendResponse;
 public class BotHandler extends BaseBotHandler {
 
     private static final int RADIX = 36;
-    private final Pattern delPattern = Pattern.compile("/del([^_]+)_(\\d+)");
+    private final Pattern delPattern = Pattern.compile("/del([^_]+)_([^-]+)");
     private final Pattern comparePattern = Pattern.compile("/cmp([^-]+)_([^-]+)_(.*)");
 
     private final ImageIndexer indexer;
@@ -48,6 +48,7 @@ public class BotHandler extends BaseBotHandler {
     }
 
     protected void handleUpdates(List<Update> updates) {
+        if (updates.isEmpty()) return;
         final var removedPosts = processAdminCommands(updates);
         processUpdates(updates, removedPosts);
     }
@@ -115,6 +116,7 @@ public class BotHandler extends BaseBotHandler {
 
     private void processUpdates(List<Update> updates, Set<Post> ignoredPosts) {
         final List<Message> channelPosts = getChannelPostsWithPhotos(updates);
+        if (channelPosts.isEmpty()) return;
         final var similarImagesInfos = new ArrayList<SimilarImagesInfo>();
         for (var post : channelPosts) {
             final var originalPost = new Post(post.chat().id(), post.messageId());
