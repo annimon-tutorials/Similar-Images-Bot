@@ -1,5 +1,5 @@
 plugins {
-    id "com.github.johnrengelman.shadow" version "6.0.0"
+    id "com.github.johnrengelman.shadow" version "8.1.1"
     id 'java'
     id 'application'
 }
@@ -8,7 +8,7 @@ sourceCompatibility = 11
 targetCompatibility = 11
 mainClassName = 'com.annimon.similarimagesbot.Main'
 group 'com.annimon'
-version '1.0.3'
+version '1.0.4'
 
 repositories {
     jcenter()
@@ -16,15 +16,16 @@ repositories {
 }
 
 dependencies {
-    implementation 'com.github.pengrad:java-telegram-bot-api:5.5.0'
+    implementation 'com.github.pengrad:java-telegram-bot-api:6.9.1'
     implementation 'com.github.kilianB:JImageHash:3.0.0'
     implementation 'com.h2database:h2:1.4.200'
 
     implementation 'org.apache.logging.log4j:log4j-core:2.17.1'
-    implementation 'com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.13.1'
-    implementation 'com.fasterxml.jackson.module:jackson-module-kotlin:2.13.1'
+    implementation 'com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.15.3'
+    implementation 'com.fasterxml.jackson.module:jackson-module-kotlin:2.15.3'
 
-    testCompile 'junit:junit:4.13.2'
+    testImplementation platform("org.junit:junit-bom:5.9.2")
+    testImplementation 'org.junit.jupiter:junit-jupiter'
 }
 
 shadowJar {
