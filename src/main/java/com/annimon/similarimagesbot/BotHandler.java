@@ -16,6 +16,7 @@ import java.util.stream.Collectors;
 import javax.imageio.ImageIO;
 import com.annimon.similarimagesbot.data.ImageResult;
 import com.annimon.similarimagesbot.data.Post;
+import com.annimon.similarimagesbot.data.Settings;
 import com.annimon.similarimagesbot.data.SimilarImagesInfo;
 import com.pengrad.telegrambot.model.Message;
 import com.pengrad.telegrambot.model.PhotoSize;
@@ -36,15 +37,14 @@ public class BotHandler extends BaseBotHandler {
     private final Pattern comparePattern = Pattern.compile("/cmp([^-]+)_([^-]+)_(.*)");
 
     private final ImageIndexer indexer;
-    private long adminId;
+    private final long adminId;
+    private final boolean autoRemove;
 
-    public BotHandler(String botToken, ImageIndexer indexer) {
-        super(botToken);
+    public BotHandler(Settings settings, ImageIndexer indexer) {
+        super(settings.getBotToken());
         this.indexer = indexer;
-    }
-
-    public void setAdminId(long adminId) {
-        this.adminId = adminId;
+        adminId = settings.getAdminId();
+        autoRemove = settings.isAutoRemove();
     }
 
     protected void handleUpdates(List<Update> updates) {
@@ -74,6 +74,11 @@ public class BotHandler extends BaseBotHandler {
         }
         final var channelId = parseChannelIdForCommand(m.group(1));
         final var messageId = Integer.parseInt(m.group(2), RADIX);
+        deletePost(channelId, messageId);
+        return Optional.of(new Post(channelId, messageId));
+    }
+
+    private void deletePost(long channelId, int messageId) {
         LOGGER.debug("Delete message {} in {}", messageId, channelId);
         bot.execute(new DeleteMessage(channelId, messageId));
         try {
@@ -81,7 +86,6 @@ public class BotHandler extends BaseBotHandler {
         } catch (SQLException ex) {
             LOGGER.error("Cannot delete image in db", ex);
         }
-        return Optional.of(new Post(channelId, messageId));
     }
 
     private Optional<Post> processCompareCommand(Matcher m) {
@@ -142,9 +146,20 @@ public class BotHandler extends BaseBotHandler {
 
     private void sendReport(List<SimilarImagesInfo> infos) {
         String report = infos.stream().map(info -> {
-            final var originalPost = info.getOriginalPost();
-            final var channelId = formatChannelIdForCommands(originalPost.getChannelId());
-            String text = "For originalPost " + formatPostLink(originalPost) + " found:\n";
+            final var newPost = info.getOriginalPost();
+
+            final var equalMatch = info.getResults().stream()
+                    .filter(r -> r.getDistance() < 1.0)
+                    .findAny();
+            if (autoRemove && equalMatch.isPresent()) {
+                final var match = equalMatch.orElseThrow();
+                deletePost(newPost.getChannelId(), newPost.getMessageId());
+                return String.format("Removed new post #%d as it's equal to %s",
+                        newPost.getMessageId(), formatPostLink(match.getPost()));
+            }
+
+            final var channelId = formatChannelIdForCommands(newPost.getChannelId());
+            String text = "For new post " + formatPostLink(newPost) + " found:\n";
             // Matching results
             text += info.getResults().stream()
                     .map(r -> String.format("  %s, dst: %.2f", formatPostLink(r.getPost()), r.getDistance()))
@@ -152,10 +167,10 @@ public class BotHandler extends BaseBotHandler {
             // /compare command
             text += info.getResults().stream()
                     .map(ImageResult::getPost)
-                    .map(p -> formatCompareCommand(channelId, originalPost, p))
+                    .map(p -> formatCompareCommand(channelId, newPost, p))
                     .collect(Collectors.joining());
             // /del command
-            text += formatDelCommand(channelId, originalPost);
+            text += formatDelCommand(channelId, newPost);
             return text;
         }).collect(Collectors.joining("\n\n"));
 

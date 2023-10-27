@@ -1,6 +1,7 @@
 package com.annimon.similarimagesbot;
 
 import java.util.Optional;
+import com.annimon.similarimagesbot.data.Settings;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -11,10 +12,16 @@ public class Main {
     public static void main(String[] args) {
         final String botToken = stringProp("BOT_TOKEN")
                 .orElseThrow(() -> new IllegalArgumentException("BOT_TOKEN is required"));
-        final ImageIndexer indexer = new ImageIndexer();
-        final var handler = new BotHandler(botToken, indexer);
-        handler.setAdminId(longProp("ADMIN_ID").orElse(0L));
-        if (isOnceMode() || (args.length == 1 && args[0].equalsIgnoreCase("once"))) {
+        final long adminId = longProp("ADMIN_ID").orElse(0L);
+        final boolean isOnceMode = isOnceMode() || (args.length == 1 && args[0].equalsIgnoreCase("once"));
+        final boolean autoRemove = stringProp("AUTO_REMOVE")
+                .map(s -> s.equalsIgnoreCase("true"))
+                .orElse(false);
+
+        final var settings = new Settings(botToken, adminId, isOnceMode, autoRemove);
+        final var indexer = new ImageIndexer();
+        final var handler = new BotHandler(settings, indexer);
+        if (isOnceMode) {
             LOGGER.info("Started in once mode");
             handler.runOnce();
         } else {
@@ -24,8 +31,9 @@ public class Main {
     }
 
     private static boolean isOnceMode() {
-        final var mode = stringProp("MODE").orElse("once");
-        return mode.equalsIgnoreCase("once");
+        return stringProp("MODE")
+                .map(s -> s.equalsIgnoreCase("once"))
+                .orElse(true);
     }
 
     private static Optional<String> stringProp(String name) {
